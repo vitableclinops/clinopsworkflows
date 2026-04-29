@@ -31,7 +31,6 @@ jobs:
       - name: Run post-meeting workflow
         env:
           GRANOLA_API_TOKEN: ${{ secrets.GRANOLA_API_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LINEAR_CLINOPS_TEAM_NAME: ${{ vars.LINEAR_CLINOPS_TEAM_NAME || 'Clinical' }}

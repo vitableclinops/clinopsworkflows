@@ -1,62 +1,44 @@
-"""Uses Claude to parse Granola's meeting summary into structured action items."""
+"""
+Parses Granola's AI-generated meeting summary into a structured dict.
 
-import json
-import os
+Granola already produces a '### Next Steps' section formatted as:
+  - Person: Action item text
+  - Person: Another action item
 
-import anthropic
+No external AI calls needed.
+"""
 
-MODEL = "claude-sonnet-4-6"
+import re
 
-# Stable system prompt — cached to save tokens on repeated Tuesday runs.
-_SYSTEM = """\
-You are a clinical operations assistant. You will receive the AI-generated summary \
-from a Granola meeting note for a ClinOps Weekly Sync.
-
-Your job:
-1. Write a 2–4 sentence high-level recap of the key topics discussed and decisions made.
-2. Extract every action item from the "Next Steps" section (or equivalent) and group them \
-by the person responsible. Use the exact first name or full name as it appears in the notes.
-   - If an item is assigned to the whole team, use "Team" as the key.
-   - Each action item must start with an action verb.
-
-Return ONLY valid JSON — no markdown fences, no extra text:
-{
-  "summary": "<2-4 sentence recap>",
-  "action_items": {
-    "Person Name": ["Do X by Friday", "Follow up with Y"],
-    "Another Person": ["Schedule Z call"]
-  }
-}"""
+_NEXT_STEPS_RE = re.compile(
+    r"###\s+Next\s+Steps\s*\n(.*?)(?=\n###|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 def extract_action_items(meeting: dict) -> dict:
     """
-    Parse meeting['summary'] with Claude.
-    Returns {"summary": str, "action_items": {name: [str]}}.
+    Parse meeting['summary'] into {"summary": str, "action_items": {name: [str]}}.
+
+    'summary' is the full Granola summary minus the Next Steps block.
+    'action_items' maps each person's name to their list of action items.
     """
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    raw = meeting.get("summary", "")
+    match = _NEXT_STEPS_RE.search(raw)
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=1024,
-        system=[
-            {
-                "type": "text",
-                "text": _SYSTEM,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Meeting: {meeting['title']}\n"
-                    f"Date: {meeting['date']}\n\n"
-                    f"{meeting['summary']}"
-                ),
-            }
-        ],
-    )
+    action_items: dict[str, list[str]] = {}
+    if match:
+        for line in match.group(1).splitlines():
+            line = line.strip().lstrip("-").strip()
+            if ":" not in line:
+                continue
+            person, _, action = line.partition(":")
+            person, action = person.strip(), action.strip()
+            if person and action:
+                action_items.setdefault(person, []).append(action)
 
-    raw = response.content[0].text.strip()
-    return json.loads(raw)
+    # Summary text = everything before the Next Steps section
+    summary_text = _NEXT_STEPS_RE.sub("", raw).strip()
+    summary_text = re.sub(r"\n{3,}", "\n\n", summary_text)
+
+    return {"summary": summary_text, "action_items": action_items}

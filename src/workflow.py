@@ -4,7 +4,7 @@ ClinOps Weekly Sync — post-meeting automation.
 Triggered by GitHub Actions every Tuesday at 12:15 PM CT.
 Steps:
   1. Fetch today's ClinOps Weekly Sync notes from Granola.
-  2. Use Claude to extract a summary + per-person action items.
+  2. Parse Granola's existing AI summary for per-person action items.
   3. Post the summary to Slack #clinops-meeting-prep-and-process-improvement.
   4. Create a triage issue in Linear (Clinical team) for each action item.
 """
@@ -35,11 +35,11 @@ def main() -> None:
         log.error("Meeting found but summary is empty — notes may not be ready yet.")
         sys.exit(1)
 
-    # 2. Claude synthesis
-    log.info("Extracting action items with Claude...")
+    # 2. Parse Granola's summary for action items
+    log.info("Parsing action items from Granola summary...")
     synthesis = extract_action_items(meeting)
     total_items = sum(len(v) for v in synthesis["action_items"].values())
-    log.info("Extracted %d action item(s) across %d person(s)", total_items, len(synthesis["action_items"]))
+    log.info("Found %d action item(s) across %d person(s)", total_items, len(synthesis["action_items"]))
 
     # 3. Slack
     log.info("Posting summary to Slack...")
