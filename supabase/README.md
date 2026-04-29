@@ -1,8 +1,8 @@
 # Supabase — provider data + activation candidate ranking
 
 This directory holds the schema and seed tooling for the ClinOps provider
-operational store. It replaces the Lovable / ClinOps Hub setup so we can run
-on a Supabase project that has a BAA.
+operational store. Replaces the Lovable / ClinOps Hub setup so we can run on
+a Supabase project that has a BAA.
 
 Project: `https://bbquooftytwprllipcsb.supabase.co`
 
@@ -10,41 +10,44 @@ Project: `https://bbquooftytwprllipcsb.supabase.co`
 
 ```
 supabase/
-├── migrations/                     # Apply in numeric order.
+├── migrations/                         # Apply in numeric order — see below.
 │   ├── 0001_create_providers.sql
 │   ├── 0002_create_provider_licenses.sql
 │   ├── 0003_create_provider_utilization_daily.sql
 │   ├── 0004_get_activation_candidates.sql
 │   └── 0005_enable_rls.sql
 └── seed/
-    ├── seed_providers.py           # Idempotent CSV → REST upsert.
+    ├── seed_providers.py               # Idempotent CSV → REST upsert.
     ├── providers.csv.example
     └── licenses.csv.example
 ```
 
-## Apply migrations
+## Apply migrations (one-time setup)
 
-**Option A — Supabase Studio (easiest, one-time):** Project → SQL Editor →
-paste each file in order, run.
+The migration files are SQL recipes — they don't take effect until you run
+them against the database. Easiest path: paste each one into Supabase's
+web SQL Editor.
 
-**Option B — Supabase CLI:** rename each file to a 14-digit timestamp prefix
-(e.g. `20260429100001_create_providers.sql`) and run `supabase db push`.
+1. Open <https://supabase.com/dashboard> and click into the **clinopsworkflows**
+   project.
+2. In the left sidebar, click the **SQL Editor** icon (looks like `</>`).
+3. Click **New query**.
+4. Open `migrations/0001_create_providers.sql` from this repo. Copy the entire
+   file. Paste into the SQL Editor. Click **Run** (bottom-right). Should say
+   "Success. No rows returned."
+5. Repeat for `0002`, `0003`, `0004`, `0005` — five files, five paste-and-runs,
+   in that order.
+6. Verify: click **Table Editor** in the sidebar. You should see
+   `providers`, `provider_licenses`, and `provider_utilization_daily`.
 
-**Option C — `psql`:**
-
-```bash
-PGPASSWORD=$DB_PASSWORD psql \
-  "host=db.bbquooftytwprllipcsb.supabase.co user=postgres dbname=postgres sslmode=require" \
-  -f migrations/0001_create_providers.sql \
-  -f migrations/0002_create_provider_licenses.sql \
-  -f migrations/0003_create_provider_utilization_daily.sql \
-  -f migrations/0004_get_activation_candidates.sql \
-  -f migrations/0005_enable_rls.sql
-```
+If a migration errors, stop and read the message — it's almost always a
+missing prior migration (e.g. running `0002` without `0001`).
 
 ## Seed providers + licenses
 
-1. Copy the example CSVs and fill them with real data:
+After the tables exist, populate them with real provider data.
+
+1. Copy the example CSVs and fill them in:
 
    ```bash
    cp supabase/seed/providers.csv.example supabase/seed/providers.csv
@@ -53,12 +56,16 @@ PGPASSWORD=$DB_PASSWORD psql \
 
    The `.gitignore` keeps real rosters out of the repo.
 
-2. Run the seed script with the **service-role** key (Studio → Project Settings
-   → API → `service_role`, *not* the anon key):
+2. Get the **service-role** key from Supabase: Project Settings → API →
+   `service_role` (NOT the anon key — service_role bypasses RLS so the
+   seed can write).
+
+3. Run the seed script:
 
    ```bash
    export SUPABASE_URL=https://bbquooftytwprllipcsb.supabase.co
    export SUPABASE_SERVICE_ROLE_KEY=eyJ...
+   pip install -r requirements.txt
    python supabase/seed/seed_providers.py \
      --providers supabase/seed/providers.csv \
      --licenses  supabase/seed/licenses.csv
@@ -66,6 +73,16 @@ PGPASSWORD=$DB_PASSWORD psql \
 
    Re-running is safe: providers upsert on `email`, licenses on
    `(provider_id, state)`.
+
+## Provider utilization sync
+
+The `provider_utilization_daily` table is populated by a separate nightly
+job at 4 AM Central — see `.github/workflows/sync-provider-utilization.yml`
+and `src/sync_provider_utilization.py`. Until you configure the Metabase
+card IDs (`METABASE_DAILY_UTIL_CARD_ID`, `METABASE_5WK_UTIL_CARD_ID`) as
+GitHub Actions variables, the table stays empty and
+`get_activation_candidates` ranks every candidate as if utilization were 0
+(highest priority). That's fine for bootstrap.
 
 ## RPC: get_activation_candidates
 
@@ -101,15 +118,9 @@ Ranking within each state:
 2. `readiness_status` — `ready` before `training` before `paused`
 3. Provider name (alphabetical, for stable ordering)
 
-## Provider utilization sync
+## RLS posture
 
-Not implemented yet — `provider_utilization_daily` is empty until we wire a
-sync from Metabase's Daily Provider Utilization card. Until then,
-`get_activation_candidates` ranks every candidate as if utilization were 0,
-which is fine for bootstrap.
-
-## RLS
-
-All three tables are RLS-enabled with deny-by-default for `anon` and
-`authenticated`. The service-role key bypasses RLS, which is what the daily
-report job uses. No frontend access until we add explicit policies.
+All three tables have RLS enabled with deny-by-default for `anon` and
+`authenticated`. The service-role key bypasses RLS, which is what the
+daily-report and utilization-sync jobs use. No frontend access until we add
+explicit policies.
