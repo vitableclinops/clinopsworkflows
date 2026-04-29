@@ -34,9 +34,17 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run daily availability report
+        working-directory: src
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          METABASE_URL: ${{ secrets.METABASE_URL }}
+          METABASE_API_KEY: ${{ secrets.METABASE_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HOMEBASE_API_KEY: ${{ secrets.HOMEBASE_API_KEY }}
+          HOMEBASE_LOCATION_IDS: ${{ secrets.HOMEBASE_LOCATION_IDS }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           REPORT_DATE: ${{ inputs.date }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: python src/daily_availability_report.py
+        run: python daily_availability_report.py
