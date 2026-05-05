@@ -5,7 +5,7 @@ Triggered by GitHub Actions every Tuesday at 12:15 PM CT.
 Steps:
   1. Fetch today's ClinOps Weekly Sync notes from Granola.
   2. Parse Granola's existing AI summary for per-person action items.
-  3. Post the summary to Slack #clinops-meeting-prep-and-process-improvement.
+  3. Post the summary to Slack #clinops-meeting-prep-and-improvement.
   4. Create a triage issue in Linear (Clinical team) for each action item.
 """
 
@@ -44,7 +44,7 @@ def main() -> None:
     # 3. Slack
     log.info("Posting summary to Slack...")
     post_meeting_summary(meeting, synthesis)
-    log.info("Slack message posted to #clinops-meeting-prep-and-process-improvement")
+    log.info("Slack message posted to #clinops-meeting-prep-and-improvement")
 
     # 4. Linear
     log.info("Creating Linear triage issues...")

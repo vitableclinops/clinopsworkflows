@@ -5,7 +5,7 @@ import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-CHANNEL = "clinops-meeting-prep-and-process-improvement"
+CHANNEL = "clinops-meeting-prep-and-improvement"
 
 
 def post_meeting_summary(meeting: dict, synthesis: dict) -> None:

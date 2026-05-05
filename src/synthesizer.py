@@ -1,44 +1,92 @@
 """
-Parses Granola's AI-generated meeting summary into a structured dict.
+Uses the Claude API to synthesize Granola meeting notes into a structured
+summary and per-person action items.
 
-Granola already produces a '### Next Steps' section formatted as:
-  - Person: Action item text
-  - Person: Another action item
-
-No external AI calls needed.
+Prompt caching is applied to the static system prompt so repeated runs
+(e.g. retries) don't re-bill the same tokens.
 """
 
+import json
+import logging
+import os
 import re
 
-_NEXT_STEPS_RE = re.compile(
-    r"###\s+Next\s+Steps\s*\n(.*?)(?=\n###|\Z)",
-    re.DOTALL | re.IGNORECASE,
-)
+import anthropic
+
+log = logging.getLogger(__name__)
+
+MODEL = "claude-sonnet-4-6"
+
+_SYSTEM = """\
+You are an assistant that processes clinical operations meeting notes.
+Given raw meeting notes, produce:
+1. A concise narrative summary (2–4 sentences) of what was discussed.
+2. A list of action items grouped by the person responsible.
+
+Return ONLY a JSON object with this exact shape — no prose, no markdown fences:
+{
+  "summary": "<narrative summary>",
+  "action_items": {
+    "<Person Name>": ["<action item>", ...],
+    ...
+  }
+}
+
+Rules:
+- Include only people who have at least one action item.
+- If an action item has no clear owner, use the key "Team".
+- Action items must be complete, self-contained sentences.
+- Do not invent information not present in the notes.
+"""
 
 
 def extract_action_items(meeting: dict) -> dict:
     """
-    Parse meeting['summary'] into {"summary": str, "action_items": {name: [str]}}.
-
-    'summary' is the full Granola summary minus the Next Steps block.
-    'action_items' maps each person's name to their list of action items.
+    Call Claude to synthesize meeting['summary'] into:
+      {"summary": str, "action_items": {name: [str]}}
     """
-    raw = meeting.get("summary", "")
-    match = _NEXT_STEPS_RE.search(raw)
+    raw = meeting.get("summary", "").strip()
+    if not raw:
+        return {"summary": "", "action_items": {}}
 
-    action_items: dict[str, list[str]] = {}
-    if match:
-        for line in match.group(1).splitlines():
-            line = line.strip().lstrip("-").strip()
-            if ":" not in line:
-                continue
-            person, _, action = line.partition(":")
-            person, action = person.strip(), action.strip()
-            if person and action:
-                action_items.setdefault(person, []).append(action)
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    # Summary text = everything before the Next Steps section
-    summary_text = _NEXT_STEPS_RE.sub("", raw).strip()
-    summary_text = re.sub(r"\n{3,}", "\n\n", summary_text)
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=1024,
+        system=[
+            {
+                "type": "text",
+                "text": _SYSTEM,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Meeting: {meeting.get('title', 'ClinOps Weekly Sync')}\n"
+                    f"Date: {meeting.get('date', '')}\n"
+                    f"Participants: {', '.join(meeting.get('participants', []))}\n\n"
+                    f"Notes:\n{raw}"
+                ),
+            }
+        ],
+    )
 
-    return {"summary": summary_text, "action_items": action_items}
+    text = message.content[0].text.strip()
+
+    # Strip markdown code fences if the model adds them despite instructions
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        log.error("Claude returned non-JSON: %s", text[:200])
+        raise RuntimeError(f"Synthesis failed — bad JSON from Claude: {exc}") from exc
+
+    return {
+        "summary": parsed.get("summary", ""),
+        "action_items": parsed.get("action_items", {}),
+    }
