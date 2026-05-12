@@ -2,10 +2,10 @@ name: ClinOps Weekly Sync — Post-Meeting Automation
 
 on:
   schedule:
-    # 12:15 PM CDT (UTC-5) = 17:15 UTC — active Mar through Nov
-    - cron: '15 17 * * 2'
-    # 12:15 PM CST (UTC-6) = 18:15 UTC — active Nov through Mar
-    - cron: '15 18 * * 2'
+    # 12:45 PM CDT (UTC-5) = 17:45 UTC — active Mar through Nov
+    - cron: '45 17 * * 2'
+    # 12:45 PM CST (UTC-6) = 18:45 UTC — active Nov through Mar
+    - cron: '45 18 * * 2'
   workflow_dispatch:
     inputs:
       date:
@@ -14,26 +14,45 @@ on:
         type: string
 
 jobs:
-  process-meeting-notes:
+  meeting-summary:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Run meeting-summary skill
+        uses: anthropics/claude-code-action@v1
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: >
+            Run /meeting-summary ClinOps Weekly Sync
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run post-meeting workflow
-        env:
-          GRANOLA_API_TOKEN: ${{ secrets.GRANOLA_API_TOKEN }}
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          LINEAR_CLINOPS_TEAM_NAME: ${{ vars.LINEAR_CLINOPS_TEAM_NAME || 'Clinical' }}
-          GRANOLA_MEETING_TITLE: ${{ vars.GRANOLA_MEETING_TITLE || 'ClinOps Weekly Sync' }}
-          WORKFLOW_DATE: ${{ inputs.date }}
-        run: python src/workflow.py
+            ${{ inputs.date && format('Use meeting notes from {0}.', inputs.date) || '' }}
+          mcp_config: |
+            {
+              "mcpServers": {
+                "Granola": {
+                  "command": "npx",
+                  "args": ["-y", "@granola-inc/mcp-server"],
+                  "env": {
+                    "GRANOLA_API_TOKEN": "${{ secrets.GRANOLA_API_TOKEN }}"
+                  }
+                },
+                "Slack": {
+                  "command": "npx",
+                  "args": ["-y", "@modelcontextprotocol/server-slack"],
+                  "env": {
+                    "SLACK_BOT_TOKEN": "${{ secrets.SLACK_BOT_TOKEN }}"
+                  }
+                },
+                "Linear": {
+                  "command": "npx",
+                  "args": ["-y", "@linear/mcp-server"],
+                  "env": {
+                    "LINEAR_API_KEY": "${{ secrets.LINEAR_API_KEY }}"
+                  }
+                }
+              }
+            }
