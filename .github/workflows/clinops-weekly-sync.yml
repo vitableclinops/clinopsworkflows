@@ -2,10 +2,10 @@ name: ClinOps Weekly Sync — Post-Meeting Automation
 
 on:
   schedule:
-    # 12:15 PM CDT (UTC-5) = 17:15 UTC — active Mar through Nov
-    - cron: '15 17 * * 2'
-    # 12:15 PM CST (UTC-6) = 18:15 UTC — active Nov through Mar
-    - cron: '15 18 * * 2'
+    # 12:45 PM CDT (UTC-5) = 17:45 UTC — active Mar through Nov
+    - cron: '45 17 * * 2'
+    # 12:45 PM CST (UTC-6) = 18:45 UTC — active Nov through Mar
+    - cron: '45 18 * * 2'
   workflow_dispatch:
     inputs:
       date:
