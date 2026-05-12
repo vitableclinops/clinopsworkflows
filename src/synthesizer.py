@@ -11,7 +11,7 @@ No external AI calls needed.
 import re
 
 _NEXT_STEPS_RE = re.compile(
-    r"###\s+Next\s+Steps\s*\n(.*?)(?=\n###|\Z)",
+    r"###\s+(?:Next\s+Steps|Action\s+Items)\s*\n(.*?)(?=\n###|\Z)",
     re.DOTALL | re.IGNORECASE,
 )
 
